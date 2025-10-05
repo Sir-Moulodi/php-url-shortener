@@ -1,6 +1,63 @@
-RewriteEngine On
-RewriteBase /
+# Enable rewrites for clean short URLs and optimize delivery
 
-RewriteCond %{REQUEST_FILENAME} !-f
-RewriteCond %{REQUEST_FILENAME} !-d
-RewriteRule ^([a-zA-Z0-9]{6})$ redirect.php?code=$1 [L]
+# Security and baseline options
+Options -Indexes
+DirectoryIndex index.php
+
+# ----------------------------------------------------------------------------
+# Clean URLs: /AbC123 -> redirect.php?code=AbC123
+# ----------------------------------------------------------------------------
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+
+  # Skip existing files/directories
+  RewriteCond %{REQUEST_FILENAME} -f [OR]
+  RewriteCond %{REQUEST_FILENAME} -d
+  RewriteRule ^ - [L]
+
+  # Match a 6-char base62 short code at the root
+  RewriteRule ^([A-Za-z0-9]{6})$ redirect.php?code=$1 [L,QSA]
+
+  # Fallback to index.php for everything else (keeps app single-file friendly)
+  RewriteRule ^ index.php [L]
+</IfModule>
+
+# ----------------------------------------------------------------------------
+# Compression (prefer Brotli, fallback to Deflate)
+# ----------------------------------------------------------------------------
+<IfModule mod_brotli.c>
+  AddOutputFilterByType BROTLI_COMPRESS text/html text/plain text/xml text/css \
+    application/javascript application/json image/svg+xml
+  # Reasonable default balance
+  BrotliCompressionQuality 5
+</IfModule>
+
+<IfModule mod_deflate.c>
+  AddOutputFilterByType DEFLATE text/html text/plain text/xml text/css \
+    application/javascript application/json image/svg+xml
+</IfModule>
+
+# ----------------------------------------------------------------------------
+# Caching: long cache for static assets, no-store for dynamic pages
+# ----------------------------------------------------------------------------
+<IfModule mod_expires.c>
+  ExpiresActive On
+  ExpiresByType text/css "access plus 1 year"
+  ExpiresByType application/javascript "access plus 1 year"
+  ExpiresByType image/svg+xml "access plus 1 year"
+  ExpiresByType image/x-icon "access plus 1 year"
+  ExpiresByType application/json "access plus 1 hour"
+  ExpiresDefault "access plus 1 hour"
+</IfModule>
+
+<IfModule mod_headers.c>
+  # Immutable cache for hashed/static resources
+  <FilesMatch "\.(?:css|js|svg|ico)$">
+    Header set Cache-Control "public, max-age=31536000, immutable"
+  </FilesMatch>
+
+  # Dynamic content should not be cached by intermediaries
+  <FilesMatch "\.(?:php|html)$">
+    Header set Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
+  </FilesMatch>
+</IfModule>
